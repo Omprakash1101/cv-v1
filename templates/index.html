@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Flowchart Generator</title>
+
+<style>
+body {
+    margin: 0;
+    font-family: Arial, sans-serif;
+    background: #0f172a;
+    color: #e2e8f0;
+}
+
+.container {
+    display: flex;
+    height: 100vh;
+}
+
+.left {
+    width: 35%;
+    padding: 15px;
+    background: #020617;
+    display: flex;
+    flex-direction: column;
+}
+
+.right {
+    flex: 1;
+    padding: 20px;
+    overflow: auto;
+    background: #020617;
+}
+
+textarea {
+    width: 100%;
+    height: 250px;
+    background: #020617;
+    color: #e2e8f0;
+    border: 1px solid #334155;
+    padding: 10px;
+    resize: none;
+}
+
+button {
+    margin-top: 10px;
+    padding: 10px;
+    background: #2563eb;
+    border: none;
+    color: white;
+    cursor: pointer;
+}
+
+button:hover {
+    background: #1d4ed8;
+}
+
+.example-btn {
+    margin: 3px;
+    padding: 5px 8px;
+    background: #1e293b;
+    border: none;
+    color: #cbd5f5;
+    cursor: pointer;
+}
+
+#output svg {
+    max-width: 100%;
+}
+</style>
+</head>
+
+<body>
+
+<div class="container">
+
+    <!-- LEFT PANEL -->
+    <div class="left">
+
+        <h3>Examples</h3>
+        <div id="examples"></div>
+
+        <h3>Code</h3>
+        <textarea id="code" placeholder="Type Python code here..."></textarea>
+
+        <button onclick="generate()">Generate</button>
+        <button onclick="downloadFile('svg')">Download SVG</button>
+        <button onclick="downloadFile('png')">Download PNG</button>
+
+    </div>
+
+    <!-- RIGHT PANEL -->
+    <div class="right">
+        <h3>Flowchart</h3>
+        <div id="output">Start typing to generate flowchart...</div>
+    </div>
+
+</div>
+
+<!-- ✅ SAFE JSON FROM DJANGO -->
+{{ examples|json_script:"examples-data" }}
+
+<script>
+
+// 🔹 Read examples safely
+const examples = JSON.parse(
+    document.getElementById("examples-data").textContent
+);
+
+// 🔹 CSRF Token
+function getCSRFToken() {
+    return document.cookie.split('; ')
+        .find(row => row.startsWith('csrftoken'))
+        ?.split('=')[1];
+}
+
+
+// 🔹 Load example buttons
+const exampleDiv = document.getElementById("examples");
+
+examples.forEach(name => {
+    const btn = document.createElement("button");
+    btn.innerText = name;
+    btn.className = "example-btn";
+
+    btn.onclick = () => {
+        fetch(`/example/${name}/`)
+        .then(res => res.json())
+        .then(data => {
+            document.getElementById("code").value = data.code;
+            generate(); // auto run
+        });
+    };
+
+    exampleDiv.appendChild(btn);
+});
+
+
+// 🔹 Generate flowchart
+function generate() {
+    const code = document.getElementById("code").value;
+
+    if (!code.trim()) {
+        document.getElementById("output").innerHTML = "";
+        return;
+    }
+
+    document.getElementById("output").innerHTML = "Generating...";
+
+    fetch("/generate/", {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json",
+            "X-CSRFToken": getCSRFToken()
+        },
+        body: JSON.stringify({ code: code })
+    })
+    .then(res => res.json())
+    .then(data => {
+        if (data.error) {
+            document.getElementById("output").innerHTML =
+                `<p style="color:red;">${data.error}</p>`;
+            return;
+        }
+
+        document.getElementById("output").innerHTML = data.svg;
+    });
+}
+
+
+// 🔥 LIVE TYPING (debounce)
+let timer;
+document.getElementById("code").addEventListener("input", () => {
+    clearTimeout(timer);
+    timer = setTimeout(generate, 600);
+});
+
+
+// 🔹 Download
+function downloadFile(format) {
+    const code = document.getElementById("code").value;
+
+    fetch("/download/", {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json",
+            "X-CSRFToken": getCSRFToken()
+        },
+        body: JSON.stringify({ code: code, format: format })
+    })
+    .then(res => res.blob())
+    .then(blob => {
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = "flowchart." + format;
+        a.click();
+    });
+}
+
+</script>
+
+</body>
+</html>
