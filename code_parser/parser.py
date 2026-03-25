@@ -489,11 +489,26 @@ def generate_flowchart_svg(code: str):
         dot = b.finish()
         # Remove pure pass-through point nodes
         clean_src = _remove_passthrough_points(dot.source)
-        from graphviz import Source
-        svg = Source(clean_src).pipe(format="svg").decode("utf-8")
-        if "<?xml" in svg:
-            svg = svg[svg.index("<svg"):]
-        return svg, ""
+        import pydot
+
+        def dot_to_svg(dot_string):
+            try:
+                graphs = pydot.graph_from_dot_data(dot_string)
+
+                if not graphs:
+                    return None, "Invalid DOT data"
+
+                svg_bytes = graphs[0].create_svg()
+                svg = svg_bytes.decode("utf-8")
+
+                return svg, None
+
+            except Exception as e:
+                return None, str(e)
+        svg, err = dot_to_svg(clean_src)
+        if err:
+            return "", f"Error generating SVG: {err}"
+        return svg, None
     except Exception as e:
         import traceback
         return "", f"Error: {e}\n{traceback.format_exc()}"
