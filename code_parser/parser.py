@@ -489,19 +489,21 @@ def generate_flowchart_svg(code: str):
         dot = b.finish()
         # Remove pure pass-through point nodes
         clean_src = _remove_passthrough_points(dot.source)
-        import pydot
+        import requests
 
         def dot_to_svg(dot_string):
             try:
-                graphs = pydot.graph_from_dot_data(dot_string)
+                response = requests.post(
+                    "https://kroki.io/graphviz/svg",
+                    data=dot_string.encode("utf-8"),
+                    headers={"Content-Type": "text/plain"},
+                    timeout=5
+                )
 
-                if not graphs:
-                    return None, "Invalid DOT data"
+                if response.status_code != 200:
+                    return None, f"Kroki error: {response.status_code}"
 
-                svg_bytes = graphs[0].create_svg()
-                svg = svg_bytes.decode("utf-8")
-
-                return svg, None
+                return response.text, None
 
             except Exception as e:
                 return None, str(e)
