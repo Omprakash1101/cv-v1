@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+  <title>Analysis Result</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=Syne:wght@400;700;800&display=swap" rel="stylesheet"/>
+  <style>
+    :root{--bg:#0a0c10;--surface:#111318;--border:#1e2130;--accent:#00e5ff;--accent2:#7c3aed;--text:#e2e8f0;--muted:#4a5568;--mono:'JetBrains Mono',monospace;--display:'Syne',sans-serif}
+    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+    body{background:var(--bg);color:var(--text);font-family:var(--display);padding:2.5rem 1.5rem}
+    body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(var(--border) 1px,transparent 1px),linear-gradient(90deg,var(--border) 1px,transparent 1px);background-size:40px 40px;opacity:.35;pointer-events:none;z-index:0}
+    .wrap{position:relative;z-index:1;max-width:1140px;margin:0 auto}
+    header{display:flex;align-items:center;gap:.8rem;margin-bottom:2.5rem}
+    .dot{width:10px;height:10px;border-radius:50%;background:var(--accent);box-shadow:0 0 14px var(--accent)}
+    h1{font-size:1.4rem;font-weight:800;color:#fff}
+    h1 span{color:var(--accent)}
+    a.back{margin-left:auto;font-family:var(--mono);font-size:.75rem;color:var(--muted);text-decoration:none;border:1px solid var(--border);padding:5px 12px;border-radius:20px;transition:color .2s}
+    a.back:hover{color:var(--accent);border-color:var(--accent)}
+    .sec{font-family:var(--mono);font-size:.7rem;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin-bottom:.7rem;display:flex;align-items:center;gap:.5rem}
+    .sec::after{content:'';flex:1;height:1px;background:var(--border)}
+    .summary{background:var(--surface);border:1px solid var(--border);border-left:3px solid var(--accent);border-radius:8px;padding:1.2rem 1.4rem;margin-bottom:1.5rem;font-size:.9rem;line-height:1.8;color:#94a3b8}
+    .svg-wrap{background:var(--surface);border:1px solid var(--border);border-radius:10px;overflow:auto;padding:1rem;margin-bottom:1.5rem;max-height:600px}
+    .svg-wrap svg{max-width:100%;height:auto}
+    .class-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:1rem;margin-bottom:1.5rem}
+    .class-card{background:var(--surface);border:1px solid var(--border);border-radius:8px;overflow:hidden}
+    .class-header{padding:.6rem 1rem;background:rgba(124,58,237,.15);border-bottom:1px solid var(--border);display:flex;align-items:center;gap:.5rem}
+    .class-header .cdot{width:7px;height:7px;border-radius:50%;background:var(--accent2)}
+    .class-header strong{font-family:var(--mono);font-size:.82rem;color:#c4b5fd}
+    .class-header .bases{font-family:var(--mono);font-size:.72rem;color:var(--muted);margin-left:auto}
+    .class-section{padding:.5rem 1rem;border-bottom:1px solid var(--border)}
+    .class-section:last-child{border-bottom:none}
+    .class-section .sl{font-family:var(--mono);font-size:.65rem;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-bottom:.3rem}
+    .class-section ul{list-style:none}
+    .class-section li{font-family:var(--mono);font-size:.75rem;color:#94a3b8;padding:.15rem 0}
+    .class-section li::before{content:"›  ";color:var(--accent)}
+    .steps{display:flex;flex-direction:column;gap:.75rem}
+    .step{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:.9rem 1.1rem;display:flex;gap:.9rem;align-items:flex-start}
+    .snum{flex-shrink:0;width:28px;height:28px;background:rgba(0,229,255,.1);border:1px solid rgba(0,229,255,.25);border-radius:6px;display:flex;align-items:center;justify-content:center;font-family:var(--mono);font-size:.73rem;font-weight:600;color:var(--accent)}
+    .stitle{font-size:.86rem;font-weight:700;color:#fff;margin-bottom:.2rem}
+    .sexpl{font-family:var(--mono);font-size:.76rem;color:#64748b;line-height:1.7}
+  </style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="dot"></div>
+    <h1>Analysis <span>Result</span></h1>
+    <a href="/" class="back">← Back</a>
+  </header>
+
+  {% if analysis.summary %}
+  <div class="sec">Summary</div>
+  <div class="summary">{{ analysis.summary }}</div>
+  {% endif %}
+
+  {% if analysis.svg %}
+  <div class="sec">Flowchart</div>
+  <div class="svg-wrap">{{ analysis.svg|safe }}</div>
+  {% endif %}
+
+  {% if analysis.classes %}
+  <div class="sec">Class Diagram</div>
+  <div class="class-grid">
+    {% for cls in analysis.classes %}
+    <div class="class-card">
+      <div class="class-header">
+        <div class="cdot"></div>
+        <strong>{{ cls.name }}</strong>
+        {% if cls.bases %}<span class="bases">extends {{ cls.bases|join:", " }}</span>{% endif %}
+      </div>
+      {% if cls.fields %}
+      <div class="class-section">
+        <div class="sl">Fields</div>
+        <ul>{% for f in cls.fields %}<li>{{ f }}</li>{% endfor %}</ul>
+      </div>
+      {% endif %}
+      {% if cls.methods %}
+      <div class="class-section">
+        <div class="sl">Methods</div>
+        <ul>{% for m in cls.methods %}<li>{{ m }}</li>{% endfor %}</ul>
+      </div>
+      {% endif %}
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  {% if analysis.steps %}
+  <div class="sec">Step-by-Step Explanation</div>
+  <div class="steps">
+    {% for s in analysis.steps %}
+    <div class="step">
+      <div class="snum">{{ s.step }}</div>
+      <div>
+        <div class="stitle">{{ s.title }}</div>
+        <div class="sexpl">{{ s.explanation }}</div>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+</div>
+</body>
+</html>

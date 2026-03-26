@@ -1,204 +1,341 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<title>Flowchart Generator</title>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Code Analyser</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=Syne:wght@400;700;800&display=swap" rel="stylesheet"/>
+  <style>
+    :root {
+      --bg:#0a0c10; --surface:#111318; --border:#1e2130;
+      --accent:#00e5ff; --accent2:#7c3aed;
+      --text:#e2e8f0; --muted:#4a5568;
+      --success:#10b981; --danger:#ef4444;
+      --mono:'JetBrains Mono',monospace;
+      --display:'Syne',sans-serif;
+    }
+    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+    body{background:var(--bg);color:var(--text);font-family:var(--display);min-height:100vh;overflow-x:hidden}
+    body::before{
+      content:'';position:fixed;inset:0;
+      background-image:linear-gradient(var(--border) 1px,transparent 1px),
+        linear-gradient(90deg,var(--border) 1px,transparent 1px);
+      background-size:40px 40px;opacity:.35;pointer-events:none;z-index:0
+    }
+    .wrap{position:relative;z-index:1;max-width:1140px;margin:0 auto;padding:2.5rem 1.5rem 5rem}
 
-<style>
-body {
-    margin: 0;
-    font-family: Arial, sans-serif;
-    background: #0f172a;
-    color: #e2e8f0;
-}
+    /* Header */
+    header{display:flex;align-items:center;gap:.8rem;margin-bottom:2.5rem}
+    .dot{width:10px;height:10px;border-radius:50%;background:var(--accent);box-shadow:0 0 14px var(--accent);flex-shrink:0}
+    header h1{font-size:1.5rem;font-weight:800;letter-spacing:-.02em;color:#fff}
+    header h1 span{color:var(--accent)}
+    .badge{margin-left:auto;font-family:var(--mono);font-size:.65rem;padding:4px 10px;border:1px solid var(--border);color:var(--muted);border-radius:20px;letter-spacing:.08em;text-transform:uppercase}
 
-.container {
-    display: flex;
-    height: 100vh;
-}
+    /* Input card */
+    .card{background:var(--surface);border:1px solid var(--border);border-radius:12px;overflow:hidden;margin-bottom:1.4rem}
 
-.left {
-    width: 35%;
-    padding: 15px;
-    background: #020617;
-    display: flex;
-    flex-direction: column;
-}
+    .tabs{display:flex;border-bottom:1px solid var(--border)}
+    .tab{flex:1;padding:.85rem 1rem;background:none;border:none;border-bottom:2px solid transparent;color:var(--muted);font-family:var(--mono);font-size:.75rem;text-transform:uppercase;letter-spacing:.05em;cursor:pointer;transition:all .2s}
+    .tab.active{color:var(--accent);border-bottom-color:var(--accent);background:rgba(0,229,255,.04)}
+    .tab:hover:not(.active){color:var(--text);background:rgba(255,255,255,.03)}
 
-.right {
-    flex: 1;
-    padding: 20px;
-    overflow: auto;
-    background: #020617;
-}
+    .tab-pane{display:none;padding:1.2rem}
+    .tab-pane.active{display:block}
 
-textarea {
-    width: 100%;
-    height: 250px;
-    background: #020617;
-    color: #e2e8f0;
-    border: 1px solid #334155;
-    padding: 10px;
-    resize: none;
-}
+    textarea.code{
+      width:100%;min-height:230px;background:#0d0f14;
+      border:1px solid var(--border);border-radius:8px;
+      color:#a8d8a8;font-family:var(--mono);font-size:.82rem;
+      line-height:1.7;padding:1rem;resize:vertical;outline:none;
+      caret-color:var(--accent);transition:border-color .2s
+    }
+    textarea.code:focus{border-color:var(--accent)}
+    textarea.code::placeholder{color:#2d3748}
 
-button {
-    margin-top: 10px;
-    padding: 10px;
-    background: #2563eb;
-    border: none;
-    color: white;
-    cursor: pointer;
-}
+    .upload-zone{
+      border:2px dashed var(--border);border-radius:8px;
+      padding:2.5rem 1rem;text-align:center;cursor:pointer;
+      transition:all .2s;position:relative
+    }
+    .upload-zone:hover,.upload-zone.over{border-color:var(--accent);background:rgba(0,229,255,.04)}
+    .upload-zone input{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%}
+    .upload-zone .icon{font-size:2rem;display:block;margin-bottom:.5rem}
+    .upload-zone p{font-family:var(--mono);font-size:.8rem;color:var(--muted)}
+    .fname{margin-top:.4rem;color:var(--accent);font-family:var(--mono);font-size:.8rem}
 
-button:hover {
-    background: #1d4ed8;
-}
+    .ctrl{display:flex;align-items:center;gap:1rem;padding:1rem 1.2rem;border-top:1px solid var(--border);background:rgba(0,0,0,.2)}
+    .lbl{font-family:var(--mono);font-size:.72rem;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
+    select.fmt{background:#0d0f14;border:1px solid var(--border);color:var(--text);font-family:var(--mono);font-size:.78rem;padding:.5rem .8rem;border-radius:6px;outline:none;cursor:pointer}
+    select.fmt:focus{border-color:var(--accent)}
 
-.example-btn {
-    margin: 3px;
-    padding: 5px 8px;
-    background: #1e293b;
-    border: none;
-    color: #cbd5f5;
-    cursor: pointer;
-}
+    .run-btn{
+      margin-left:auto;background:var(--accent);color:#000;
+      border:none;padding:.6rem 1.8rem;border-radius:6px;
+      font-family:var(--display);font-size:.85rem;font-weight:700;
+      cursor:pointer;letter-spacing:.03em;transition:all .2s;
+      display:flex;align-items:center;gap:.5rem
+    }
+    .run-btn:hover{background:#33eaff;transform:translateY(-1px)}
+    .run-btn:disabled{background:var(--muted);cursor:not-allowed;transform:none}
+    .spinner{width:14px;height:14px;border:2px solid rgba(0,0,0,.25);border-top-color:#000;border-radius:50%;animation:spin .7s linear infinite;display:none}
+    .run-btn.loading .spinner{display:block}
+    @keyframes spin{to{transform:rotate(360deg)}}
 
-#output svg {
-    max-width: 100%;
-}
-</style>
+    /* Status */
+    .status{font-family:var(--mono);font-size:.75rem;padding:.55rem 1rem;border-radius:6px;margin-bottom:1.4rem;display:none}
+    .status.err{display:block;background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.3);color:var(--danger)}
+    .status.info{display:block;background:rgba(0,229,255,.06);border:1px solid rgba(0,229,255,.2);color:var(--accent)}
+
+    /* Section labels */
+    .sec{font-family:var(--mono);font-size:.7rem;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin-bottom:.7rem;display:flex;align-items:center;gap:.5rem}
+    .sec::after{content:'';flex:1;height:1px;background:var(--border)}
+
+    /* Summary */
+    .summary{background:var(--surface);border:1px solid var(--border);border-left:3px solid var(--accent);border-radius:8px;padding:1.2rem 1.4rem;margin-bottom:1.5rem;font-size:.9rem;line-height:1.8;color:#94a3b8}
+
+    /* SVG flowchart */
+    .svg-wrap{background:var(--surface);border:1px solid var(--border);border-radius:10px;overflow:auto;padding:1rem;margin-bottom:1.5rem;max-height:600px}
+    .svg-wrap svg{max-width:100%;height:auto}
+
+    /* Class diagram table grid */
+    .class-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:1rem;margin-bottom:1.5rem}
+    .class-card{background:var(--surface);border:1px solid var(--border);border-radius:8px;overflow:hidden}
+    .class-header{padding:.6rem 1rem;background:rgba(124,58,237,.15);border-bottom:1px solid var(--border);display:flex;align-items:center;gap:.5rem}
+    .class-header .cdot{width:7px;height:7px;border-radius:50%;background:var(--accent2)}
+    .class-header strong{font-family:var(--mono);font-size:.82rem;color:#c4b5fd}
+    .class-header .bases{font-family:var(--mono);font-size:.72rem;color:var(--muted);margin-left:auto}
+    .class-section{padding:.5rem 1rem;border-bottom:1px solid var(--border)}
+    .class-section:last-child{border-bottom:none}
+    .class-section .slabel{font-family:var(--mono);font-size:.65rem;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-bottom:.3rem}
+    .class-section ul{list-style:none}
+    .class-section ul li{font-family:var(--mono);font-size:.75rem;color:#94a3b8;padding:.15rem 0}
+    .class-section ul li::before{content:"›  ";color:var(--accent)}
+
+    /* Steps */
+    .steps{display:flex;flex-direction:column;gap:.75rem}
+    .step{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:.9rem 1.1rem;display:flex;gap:.9rem;align-items:flex-start;animation:up .3s ease both}
+    @keyframes up{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+    .snum{flex-shrink:0;width:28px;height:28px;background:rgba(0,229,255,.1);border:1px solid rgba(0,229,255,.25);border-radius:6px;display:flex;align-items:center;justify-content:center;font-family:var(--mono);font-size:.73rem;font-weight:600;color:var(--accent)}
+    .stitle{font-size:.86rem;font-weight:700;color:#fff;margin-bottom:.2rem}
+    .sexpl{font-family:var(--mono);font-size:.76rem;color:#64748b;line-height:1.7}
+
+    #results{display:none}
+  </style>
 </head>
-
 <body>
+<div class="wrap">
 
-<div class="container">
+  <header>
+    <div class="dot"></div>
+    <h1><span>Code</span> Analyser</h1>
+    <div class="badge">AST Engine</div>
+  </header>
 
-    <!-- LEFT PANEL -->
-    <div class="left">
-
-        <h3>Examples</h3>
-        <div id="examples"></div>
-
-        <h3>Code</h3>
-        <textarea id="code" placeholder="Type Python code here..."></textarea>
-
-        <button onclick="generate()">Generate</button>
-        <button onclick="downloadFile('svg')">Download SVG</button>
-        <button onclick="downloadFile('png')">Download PNG</button>
-
+  <div class="card">
+    <div class="tabs">
+      <button class="tab active" onclick="switchTab('code',this)">Paste Code</button>
+      <button class="tab" onclick="switchTab('zip',this)">Upload ZIP</button>
     </div>
 
-    <!-- RIGHT PANEL -->
-    <div class="right">
-        <h3>Flowchart</h3>
-        <div id="output">Start typing to generate flowchart...</div>
+    <div class="tab-pane active" id="tab-code">
+      <textarea class="code" id="code-input"
+        placeholder="# Paste your Django views.py, models.py, serializers.py…
+
+def my_view(request):
+    if request.method == 'POST':
+        return JsonResponse({'ok': True})
+    return render(request, 'index.html')
+"></textarea>
     </div>
 
+    <div class="tab-pane" id="tab-zip">
+      <div class="upload-zone" id="drop-zone">
+        <input type="file" id="zip-input" accept=".zip" onchange="onFile(this)"/>
+        <span class="icon">📦</span>
+        <p>Drop your Django project <strong>.zip</strong> here</p>
+        <p style="margin-top:.25rem">or click to browse</p>
+        <div class="fname" id="fname"></div>
+      </div>
+    </div>
+
+    <div class="ctrl">
+      <span class="lbl">Output</span>
+      <select class="fmt" id="fmt">
+        <option value="json">Render here (JSON)</option>
+        <option value="html">Full HTML page</option>
+      </select>
+      <button class="run-btn" id="run-btn" onclick="analyse()">
+        <div class="spinner"></div>
+        <span>Analyse →</span>
+      </button>
+    </div>
+  </div>
+
+  <div class="status" id="status"></div>
+
+  <div id="results">
+
+    <div class="sec">Summary</div>
+    <div class="summary" id="summary"></div>
+
+    <div class="sec">Flowchart</div>
+    <div class="svg-wrap" id="svg-wrap"></div>
+
+    <div class="sec">Class Diagram</div>
+    <div class="class-grid" id="class-grid"></div>
+
+    <div class="sec">Step-by-Step Explanation</div>
+    <div class="steps" id="steps"></div>
+
+  </div>
 </div>
 
-<!-- ✅ SAFE JSON FROM DJANGO -->
-{{ examples|json_script:"examples-data" }}
-
 <script>
-
-// 🔹 Read examples safely
-const examples = JSON.parse(
-    document.getElementById("examples-data").textContent
-);
-
-// 🔹 CSRF Token
-function getCSRFToken() {
-    return document.cookie.split('; ')
-        .find(row => row.startsWith('csrftoken'))
-        ?.split('=')[1];
+// Tab switching
+function switchTab(name, btn){
+  document.querySelectorAll('.tab').forEach(b=>b.classList.remove('active'));
+  document.querySelectorAll('.tab-pane').forEach(p=>p.classList.remove('active'));
+  btn.classList.add('active');
+  document.getElementById('tab-'+name).classList.add('active');
 }
 
+// File select
+function onFile(input){
+  const f=input.files[0];
+  document.getElementById('fname').textContent = f ? '✓ '+f.name : '';
+}
 
-// 🔹 Load example buttons
-const exampleDiv = document.getElementById("examples");
+// Drag-over
+const dz=document.getElementById('drop-zone');
+dz.addEventListener('dragover',()=>dz.classList.add('over'));
+dz.addEventListener('dragleave',()=>dz.classList.remove('over'));
+dz.addEventListener('drop',()=>dz.classList.remove('over'));
 
-examples.forEach(name => {
-    const btn = document.createElement("button");
-    btn.innerText = name;
-    btn.className = "example-btn";
+// Status
+function setStatus(msg, type){
+  const el=document.getElementById('status');
+  el.textContent=msg; el.className='status '+type;
+}
+function clearStatus(){ document.getElementById('status').className='status'; }
 
-    btn.onclick = () => {
-        fetch(`/example/${name}/`)
-        .then(res => res.json())
-        .then(data => {
-            document.getElementById("code").value = data.code;
-            generate(); // auto run
-        });
-    };
+// CSRF
+function getCookie(name){
+  const v=document.cookie.match('(^|;)\\s*'+name+'\\s*=\\s*([^;]+)');
+  return v?v.pop():'';
+}
 
-    exampleDiv.appendChild(btn);
-});
+// Main
+async function analyse(){
+  const btn   = document.getElementById('run-btn');
+  const fmt   = document.getElementById('fmt').value;
+  const code  = document.getElementById('code-input').value.trim();
+  const zip   = document.getElementById('zip-input').files[0];
+  const tab   = document.querySelector('.tab.active').textContent.trim();
 
+  if(tab==='Paste Code' && !code){ setStatus('⚠ Paste some code first.','err'); return; }
+  if(tab==='Upload ZIP'  && !zip ){ setStatus('⚠ Select a .zip file first.','err'); return; }
 
-// 🔹 Generate flowchart
-function generate() {
-    const code = document.getElementById("code").value;
+  if(fmt==='html'){ submitHTML(code,zip); return; }
 
-    if (!code.trim()) {
-        document.getElementById("output").innerHTML = "";
-        return;
-    }
+  btn.classList.add('loading'); btn.disabled=true;
+  clearStatus();
+  setStatus('⟳ Parsing AST and building flowchart…','info');
+  document.getElementById('results').style.display='none';
 
-    document.getElementById("output").innerHTML = "Generating...";
+  try{
+    const fd=new FormData();
+    fd.append('format','json');
+    if(tab==='Upload ZIP' && zip) fd.append('project_zip',zip);
+    else fd.append('code',code);
 
-    fetch("/generate/", {
-        method: "POST",
-        headers: {
-            "Content-Type": "application/json",
-            "X-CSRFToken": getCSRFToken()
-        },
-        body: JSON.stringify({ code: code })
-    })
-    .then(res => res.json())
-    .then(data => {
-        if (data.error) {
-            document.getElementById("output").innerHTML =
-                `<p style="color:red;">${data.error}</p>`;
-            return;
-        }
-
-        document.getElementById("output").innerHTML = data.svg;
+    const csrf=getCookie('csrftoken');
+    const res=await fetch('/diagram/',{
+      method:'POST',
+      headers: csrf?{'X-CSRFToken':csrf}:{},
+      body:fd,
     });
+    const data=await res.json();
+    if(!res.ok){ setStatus('✗ '+(data.error||'Error '+res.status),'err'); return; }
+
+    clearStatus();
+    if(data.warning) setStatus('⚠ '+data.warning,'info');
+    render(data);
+  } catch(e){
+    setStatus('✗ Network error: '+e.message,'err');
+  } finally{
+    btn.classList.remove('loading'); btn.disabled=false;
+  }
 }
 
+function render(data){
+  // Summary
+  document.getElementById('summary').textContent = data.summary||'—';
 
-// 🔥 LIVE TYPING (debounce)
-let timer;
-document.getElementById("code").addEventListener("input", () => {
-    clearTimeout(timer);
-    timer = setTimeout(generate, 600);
-});
+  // SVG flowchart
+  const sw=document.getElementById('svg-wrap');
+  sw.innerHTML = data.svg || '<p style="color:var(--muted);font-family:var(--mono);font-size:.8rem;padding:1rem">No flowchart generated.</p>';
 
+  // Class diagram cards
+  const cg=document.getElementById('class-grid');
+  cg.innerHTML='';
+  (data.classes||[]).forEach(cls=>{
+    const card=document.createElement('div');
+    card.className='class-card';
+    const bases=cls.bases.length ? cls.bases.join(', ') : '';
+    card.innerHTML=`
+      <div class="class-header">
+        <div class="cdot"></div>
+        <strong>${cls.name}</strong>
+        ${bases?`<span class="bases">extends ${bases}</span>`:''}
+      </div>
+      ${cls.fields.length?`
+      <div class="class-section">
+        <div class="slabel">Fields</div>
+        <ul>${cls.fields.map(f=>`<li>${f}</li>`).join('')}</ul>
+      </div>`:''}
+      ${cls.methods.length?`
+      <div class="class-section">
+        <div class="slabel">Methods</div>
+        <ul>${cls.methods.map(m=>`<li>${m}</li>`).join('')}</ul>
+      </div>`:''}
+    `;
+    cg.appendChild(card);
+  });
+  if(!data.classes||!data.classes.length){
+    cg.innerHTML='<p style="color:var(--muted);font-family:var(--mono);font-size:.8rem">No classes found in code.</p>';
+  }
 
-// 🔹 Download
-function downloadFile(format) {
-    const code = document.getElementById("code").value;
+  // Steps
+  const sc=document.getElementById('steps');
+  sc.innerHTML='';
+  (data.steps||[]).forEach((s,i)=>{
+    const d=document.createElement('div');
+    d.className='step'; d.style.animationDelay=(i*.06)+'s';
+    d.innerHTML=`
+      <div class="snum">${s.step}</div>
+      <div>
+        <div class="stitle">${s.title}</div>
+        <div class="sexpl">${s.explanation}</div>
+      </div>`;
+    sc.appendChild(d);
+  });
 
-    fetch("/download/", {
-        method: "POST",
-        headers: {
-            "Content-Type": "application/json",
-            "X-CSRFToken": getCSRFToken()
-        },
-        body: JSON.stringify({ code: code, format: format })
-    })
-    .then(res => res.blob())
-    .then(blob => {
-        const url = window.URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = "flowchart." + format;
-        a.click();
-    });
+  document.getElementById('results').style.display='block';
+  document.getElementById('results').scrollIntoView({behavior:'smooth',block:'start'});
 }
 
+function submitHTML(code, zip){
+  if(zip){ setStatus('⚠ ZIP + HTML mode: use JSON mode to view here.','err'); return; }
+  const form=document.createElement('form');
+  form.method='POST'; form.action='/diagram/'; form.target='_blank';
+  const csrf=getCookie('csrftoken');
+  if(csrf){const t=document.createElement('input');t.type='hidden';t.name='csrfmiddlewaretoken';t.value=csrf;form.appendChild(t);}
+  [['code',code],['format','html']].forEach(([n,v])=>{
+    const i=document.createElement('input');i.type='hidden';i.name=n;i.value=v;form.appendChild(i);
+  });
+  document.body.appendChild(form); form.submit(); document.body.removeChild(form);
+}
 </script>
-
 </body>
 </html>

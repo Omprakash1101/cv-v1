@@ -1,9 +1,7 @@
 from django.urls import path
-from .views import index, generate, example, download
+from .views import ProjectDiagramView, FrontendPageView
 
 urlpatterns = [
-    path('', index),
-    path('generate/', generate),
-    path('example/<str:name>/', example),
-    path('download/', download),
+    path('', FrontendPageView.as_view(), name='frontend'),
+    path('diagram/', ProjectDiagramView.as_view(), name='project-diagram'),
 ]

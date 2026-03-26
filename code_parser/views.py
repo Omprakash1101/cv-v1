@@ -1,147 +1,197 @@
-import io
-import ast as ast_mod
+"""
+views.py  –  api/views.py
+Replace your entire current views.py with this file.
+
+Views:
+  FrontendPageView   GET  /          → renders index.html (the UI)
+  ProjectDiagramView POST /diagram/  → runs AST parser, returns SVG + JSON / HTML
+"""
+
+import ast
 
 from django.shortcuts import render
-from django.http import HttpResponse
-from rest_framework.decorators import api_view
+from rest_framework.views import APIView
+from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
 from rest_framework.response import Response
+from rest_framework import status
 
-from .parser import generate_flowchart_svg, CFGBuilder
-
-
-# 🔹 Example codes (same as Flask)
-EXAMPLE_CODES = {
-    "factorial": '''def fact(n):
-    if n == 0:
-        return 1
-    return n * fact(n - 1)
-
-print(fact(5))''',
-
-    "fibonacci": '''def fib(n):
-    if n <= 1:
-        return n
-    a = 0
-    b = 1
-    for i in range(2, n + 1):
-        c = a + b
-        a = b
-        b = c
-    return b
-
-print(fib(10))''',
-
-    "bubble_sort": '''def bubble_sort(arr):
-    n = 5
-    for i in range(n):
-        for j in range(n - i - 1):
-            if j > j + 1:
-                temp = j
-    return n''',
-
-    "binary_search": '''def binary_search(target):
-    low = 0
-    high = 100
-    while low <= high:
-        mid = (low + high) // 2
-        if mid == target:
-            return mid
-        elif mid < target:
-            low = mid + 1
-        else:
-            high = mid - 1
-    return -1''',
-
-    "while_loop": '''x = 0
-total = 0
-while x < 10:
-    if x == 5:
-        break
-    total = total + x
-    x = x + 1
-print(total)''',
-
-    "for_loop": '''result = 0
-for i in range(1, 6):
-    if i == 3:
-        continue
-    result = result + i
-print(result)''',
-}
+from .serializers import ProjectAnalysisSerializer
+from .utils import extract_project_files
+from .cfg_builder import generate_flowchart_svg
 
 
-# 🔹 1. INDEX PAGE (like Flask "/")
-def index(request):
-    return render(request, "index.html", {
-        "examples": list(EXAMPLE_CODES.keys())
-    })
+# ─────────────────────────────────────────────
+#  Pure-AST helpers (no AI needed)
+# ─────────────────────────────────────────────
+
+def extract_classes(code: str) -> list:
+    """Return list of dicts: { name, bases, methods, fields }"""
+    try:
+        tree = ast.parse(code)
+    except SyntaxError:
+        return []
+
+    classes = []
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.ClassDef):
+            continue
+        bases   = [ast.unparse(b) for b in node.bases]
+        methods, fields = [], []
+        for item in node.body:
+            if isinstance(item, ast.FunctionDef):
+                args = [a.arg for a in item.args.args if a.arg != "self"]
+                methods.append(f"{item.name}({', '.join(args)})")
+            elif isinstance(item, ast.Assign):
+                for t in item.targets:
+                    fields.append(ast.unparse(t))
+            elif isinstance(item, ast.AnnAssign):
+                fields.append(
+                    f"{ast.unparse(item.target)}: {ast.unparse(item.annotation)}"
+                )
+        classes.append({"name": node.name, "bases": bases,
+                        "methods": methods, "fields": fields})
+    return classes
 
 
-# 🔹 2. GENERATE API (like Flask "/generate")
-@api_view(['POST'])
-def generate(request):
-    code = request.data.get("code", "")
+def extract_steps(code: str) -> list:
+    """Return up to 15 high-level steps from the AST."""
+    try:
+        tree = ast.parse(code)
+    except SyntaxError:
+        return []
 
-    if not code.strip():
-        return Response({"error": "No code provided"}, status=400)
+    steps, counter = [], [0]
 
-    svg, error = generate_flowchart_svg(code)
+    def add(title, explanation):
+        counter[0] += 1
+        steps.append({"step": counter[0], "title": title,
+                      "explanation": explanation})
 
-    if error:
-        return Response({"error": error}, status=400)
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            args = [a.arg for a in node.args.args]
+            add(f"Define: {node.name}",
+                f"Function '{node.name}({', '.join(args)})' "
+                f"— {len(node.body)} statement(s).")
+        elif isinstance(node, ast.ClassDef):
+            bases = [ast.unparse(b) for b in node.bases]
+            add(f"Class: {node.name}",
+                f"Inherits from {', '.join(bases)}." if bases
+                else f"Class '{node.name}' defined.")
+        elif isinstance(node, ast.If):
+            add("Conditional branch",
+                f"if {ast.unparse(node.test)}: "
+                f"{len(node.body)} true / {len(node.orelse)} false statements.")
+        elif isinstance(node, ast.For):
+            add(f"For loop",
+                f"Iterates {ast.unparse(node.target)} over {ast.unparse(node.iter)}.")
+        elif isinstance(node, ast.While):
+            add("While loop", f"Loops while {ast.unparse(node.test)}.")
+        elif isinstance(node, ast.Return) and node.value:
+            add("Return", f"Returns: {ast.unparse(node.value)}")
+        elif isinstance(node, ast.Raise):
+            add("Raise exception",
+                f"Raises: {ast.unparse(node.exc) if node.exc else 'exception'}")
+        elif isinstance(node, ast.Try):
+            add("Try / except",
+                f"{len(node.handlers)} handler(s)"
+                + (", with finally." if node.finalbody else "."))
+        if counter[0] >= 15:
+            break
+    return steps
 
-    return Response({"svg": svg})
+
+def build_summary(code: str) -> str:
+    """Lightweight AST summary — no AI."""
+    try:
+        tree = ast.parse(code)
+    except SyntaxError as e:
+        return f"Syntax error: {e}"
+
+    funcs   = [n.name for n in ast.walk(tree)
+               if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))]
+    classes = [n.name for n in ast.walk(tree)
+               if isinstance(n, ast.ClassDef)]
+    imports = [ast.unparse(n) for n in ast.walk(tree)
+               if isinstance(n, (ast.Import, ast.ImportFrom))]
+
+    parts = []
+    if classes:
+        parts.append(f"{len(classes)} class(es): {', '.join(classes)}.")
+    if funcs:
+        parts.append(f"{len(funcs)} function(s): {', '.join(funcs)}.")
+    if imports:
+        parts.append(f"Imports: {', '.join(imports[:5])}"
+                     + (" …" if len(imports) > 5 else "."))
+    return " ".join(parts) if parts else "No top-level definitions found."
 
 
-# 🔹 3. EXAMPLE API (like Flask "/example/<name>")
-@api_view(['GET'])
-def example(request, name):
-    code = EXAMPLE_CODES.get(name, "")
+# ─────────────────────────────────────────────
+#  View 1 — Frontend page  GET /
+# ─────────────────────────────────────────────
 
-    if not code:
-        return Response({"error": "Example not found"}, status=404)
-
-    return Response({"code": code})
+class FrontendPageView(APIView):
+    def get(self, request, *args, **kwargs):
+        return render(request, "index.html")
 
 
-# 🔹 4. DOWNLOAD API (like Flask "/download")
-@api_view(['POST'])
-def download(request):
-    code = request.data.get("code", "")
-    fmt = request.data.get("format", "svg")
+# ─────────────────────────────────────────────
+#  View 2 — Diagram API  POST /diagram/
+# ─────────────────────────────────────────────
 
-    if not code.strip():
-        return Response({"error": "No code provided"}, status=400)
+class ProjectDiagramView(APIView):
+    """
+    POST /diagram/
+    Inputs : code (str) OR project_zip (file), format ("json"|"html")
+    Returns: SVG flowchart + class info + steps + summary
+    """
+    parser_classes = [MultiPartParser, FormParser, JSONParser]
 
-    svg, error = generate_flowchart_svg(code)
+    def post(self, request, *args, **kwargs):
 
-    if error:
-        return Response({"error": error}, status=400)
+        serializer = ProjectAnalysisSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response({"error": serializer.errors},
+                            status=status.HTTP_400_BAD_REQUEST)
 
-    # ✅ SVG download
-    if fmt == "svg":
-        response = HttpResponse(svg, content_type="image/svg+xml")
-        response['Content-Disposition'] = 'attachment; filename="flowchart.svg"'
-        return response
+        validated   = serializer.validated_data
+        raw_code    = validated.get("code", "")
+        project_zip = validated.get("project_zip", None)
+        fmt         = validated.get("format", "json").lower()
 
-    # ✅ PNG download
-    elif fmt == "png":
-        tree = ast_mod.parse(code)
-        builder = CFGBuilder()
+        # Extract from ZIP
+        if project_zip:
+            try:
+                raw_code = extract_project_files(project_zip)
+            except Exception as exc:
+                return Response({"error": f"ZIP read failed: {exc}"},
+                                status=status.HTTP_422_UNPROCESSABLE_ENTITY)
 
-        for node in tree.body:
-            if isinstance(node, ast_mod.FunctionDef):
-                builder.visit(node)
+        if not raw_code or not raw_code.strip():
+            return Response(
+                {"error": "Provide 'code' (string) or 'project_zip' (file)."},
+                status=status.HTTP_400_BAD_REQUEST)
 
-        for node in tree.body:
-            if not isinstance(node, ast_mod.FunctionDef):
-                builder.visit(node)
+        # Run AST analysis
+        svg, err = generate_flowchart_svg(raw_code)
+        if err and not svg:
+            return Response({"error": err},
+                            status=status.HTTP_422_UNPROCESSABLE_ENTITY)
 
-        dot = builder.finish()
-        png_bytes = dot.pipe(format="png")
+        analysis = {
+            "svg":     svg,
+            "classes": extract_classes(raw_code),
+            "steps":   extract_steps(raw_code),
+            "summary": build_summary(raw_code),
+            "warning": err,
+        }
 
-        response = HttpResponse(png_bytes, content_type="image/png")
-        response['Content-Disposition'] = 'attachment; filename="flowchart.png"'
-        return response
+        if fmt == "json":
+            return Response(analysis, status=status.HTTP_200_OK)
 
-    return Response({"error": "Unknown format"}, status=400)
+        if fmt == "html":
+            return render(request, "diagram.html",
+                          {"analysis": analysis})
+
+        return Response({"error": "Invalid 'format'. Use 'json' or 'html'."},
+                        status=status.HTTP_400_BAD_REQUEST)

@@ -1,7 +1,4 @@
-"""
-cfg_builder.py — Clean CFG flowchart generator.
-No redundant connector nodes. Direct edges with color labels.
-"""
+
 import ast
 from graphviz import Digraph
 
@@ -55,10 +52,8 @@ class CFGBuilder(ast.NodeVisitor):
     # ── branch execution: visits stmts, first edge from 'origin' is colored ─
 
     def _branch(self, origin, stmts, label="", color="#4a90d9"):
-        """
-        Visit stmts. The first edge that would be drawn FROM origin
-        gets label/color applied. Returns final self.cur.
-        """
+        #Visit stmts. The first edge that would be drawn FROM origin
+        #gets label/color applied. Returns final self.cur.
         self.cur = origin
         intercepted = [False]
 
@@ -83,6 +78,38 @@ class CFGBuilder(ast.NodeVisitor):
             pass   # empty branch handled by caller
 
         return self.cur
+
+    def _handle_function_call(self, parent_node, fname):
+        #Handles both normal and recursive function calls properly
+
+        cont = f"J{self._ctr+1}"
+        self._ctr += 1
+
+        self.dot.node(
+            cont, "",
+            shape="point",
+            fillcolor="#4a90d9",
+            color="#4a90d9",
+            style="filled",
+            width="0.08"
+        )
+
+        is_recursive = (fname == self.cur_func)
+
+        if is_recursive:
+            # 🔁 RECURSIVE CALL
+            self._edge(parent_node, self.functions[fname],
+                    color="#ff9800", penwidth="2",
+                    label="recursive call")
+            
+
+        else:
+            # Normal call
+            self._edge(parent_node, self.functions[fname],
+                    style="dashed", color="#e94560",
+                    label="call")
+
+        return cont
 
     # ════════════════════════════════════════════════════════════════════════
     # Statement visitors
@@ -119,12 +146,7 @@ class CFGBuilder(ast.NodeVisitor):
                         width="0.08"
                     )
 
-                    self._edge(n, self.functions[fname],
-                            style="dashed", color="#e94560", label="call")
-                    self._edge(self.func_exits[fname], cont,
-                            style="dashed", color="#e94560", label="ret")
-
-                    self.cur = cont
+                    self.cur = self._handle_function_call(n, fname)
                     break
 
     def visit_AugAssign(self, node):
@@ -152,11 +174,7 @@ class CFGBuilder(ast.NodeVisitor):
                         style="filled",
                         width="0.08"
                     )
-                    self._edge(cond_node, self.functions[fname],
-                            style="dashed", color="#e94560", label="call")
-                    self._edge(self.func_exits[fname], cont,
-                            style="dashed", color="#e94560", label="ret")
-                    self.cur = cont
+                    self.cur = self._handle_function_call(cond_node, fname)
                     break
 
     def visit_If(self, node):
@@ -182,12 +200,7 @@ class CFGBuilder(ast.NodeVisitor):
                         width="0.08"
                     )
 
-                    self._edge(cond, self.functions[fname],
-                            style="dashed", color="#e94560", label="call")
-                    self._edge(self.func_exits[fname], cont,
-                            style="dashed", color="#e94560", label="ret")
-
-                    self.cur = cont
+                    self.cur = self._handle_function_call(cond, fname)
                     break
 
         true_exit  = self._branch(cond, node.body,   "True",  "#4caf50")
@@ -266,8 +279,8 @@ class CFGBuilder(ast.NodeVisitor):
         self._flush_pending_false()
 
     def _flush_pending_false(self):
-        """If we have a pending False edge from a while with no breaks,
-        wrap it: next node added after this will get the False edge from cond."""
+        #If we have a pending False edge from a while with no breaks,
+        #wrap it: next node added after this will get the False edge from cond.
         if not hasattr(self, "_pending_false") or self._pending_false is None:
             return
         src, label, color = self._pending_false
@@ -312,12 +325,7 @@ class CFGBuilder(ast.NodeVisitor):
                                 width="0.08"
                             )
 
-                            self._edge(self.cur, self.functions[fname],
-                                    style="dashed", color="#e94560", label="call")
-                            self._edge(self.func_exits[fname], cont,
-                                    style="dashed", color="#e94560", label="ret")
-
-                            self.cur = cont
+                            self.cur = self._handle_function_call(self.cur, fname)
                             break
             if   len(args) == 1: start, stop, step = 0, args[0], 1
             elif len(args) == 2: start, stop, step = args[0], args[1], 1
@@ -395,11 +403,7 @@ class CFGBuilder(ast.NodeVisitor):
                     self.dot.node(cont, "", shape="point",
                                   fillcolor="#4a90d9", color="#4a90d9",
                                   style="filled", width="0.08")
-                    self._edge(n, self.functions[fname],
-                               style="dashed", color="#e94560", label="call")
-                    self._edge(self.func_exits[fname], cont,
-                               style="dashed", color="#e94560", label="ret")
-                    self.cur = cont
+                    self.cur = self._handle_function_call(n, fname)
                     break
 
     # ── FUNCTION DEF ─────────────────────────────────────────────────────────
@@ -430,22 +434,43 @@ class CFGBuilder(ast.NodeVisitor):
         self.cur = prev_cur; self.vars = prev_vars; self.cur_func = prev_func
 
     # ── RETURN ───────────────────────────────────────────────────────────────
-
     def visit_Return(self, node):
-        if self.cur is None: return
-        label = f"return {ast.unparse(node.value)}" if node.value else "return"
-        n = self._node(label, "io")
-        self._edge(self.cur, n)
+        if self.cur is None:
+            return
+
+        exit_node = self.func_exits.get(self.cur_func)
+
+        ret_text = ast.unparse(node.value) if node.value else ""
+        ret_label = f"return {ret_text}".strip()
+
+        # 🔹 Create RETURN NODE directly
+        ret_node = self._node(ret_label, "io")
+        self._edge(self.cur, ret_node)
+
+        # 🔹 Detect recursive / function call inside return
         if node.value:
             for child in ast.walk(node.value):
                 if isinstance(child, ast.Call) and isinstance(child.func, ast.Name):
-                    if child.func.id in self.functions:
-                        self._edge(n, self.functions[child.func.id],
-                                   style="dashed", color="#e94560", label="call")
-        if self.cur_func and self.cur_func in self.func_exits:
-            self._edge(n, self.func_exits[self.cur_func])
-        self.cur = None
+                    fname = child.func.id
 
+                    if fname in self.functions:
+                        # 🔥 DIRECT recursive call FROM RETURN NODE
+                        self._edge(
+                            ret_node,
+                            self.functions[fname],
+                            color="#ff9800" if fname == self.cur_func else "#e94560",
+                            penwidth="2",
+                            label="recursive call" if fname == self.cur_func else "call"
+                        )
+
+                        self.cur = None
+                        return
+
+        # 🔹 Normal return
+        if exit_node:
+            self._edge(ret_node, exit_node)
+
+        self.cur = None
     def _eval(self, node):
         if isinstance(node, ast.Constant): return node.value
         if isinstance(node, ast.Name): return self.vars.get(node.id)
@@ -517,11 +542,10 @@ def generate_flowchart_svg(code: str):
 
 
 def _remove_passthrough_points(dot_source: str) -> str:
-    """
-    Post-process DOT source: remove any point node that has exactly
-    1 incoming and 1 outgoing edge (pure pass-through), replacing
-    with a direct edge carrying the incoming edge's attributes.
-    """
+    #Post-process DOT source: remove any point node that has exactly
+    #1 incoming and 1 outgoing edge (pure pass-through), replacing
+    #with a direct edge carrying the incoming edge's attributes.
+    
     import re
     lines = dot_source.split('\n')
 
@@ -589,4 +613,4 @@ def _remove_passthrough_points(dot_source: str) -> str:
             new_lines[i:i] = bypass
             break
 
-    return '\n'.join(new_lines)
+    return '\n'.join(new_lines) 
