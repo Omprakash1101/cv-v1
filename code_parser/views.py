@@ -22,7 +22,8 @@ from .serializers import ProjectAnalysisSerializer
 from .utils import extract_project_files
 from .cfg_builder import generate_flowchart_svg
 
-
+import logging
+logger = logging.getLogger(__name__)
 # ─────────────────────────────────────────────
 #  Pure-AST helpers (no AI needed)
 # ─────────────────────────────────────────────
@@ -167,7 +168,7 @@ class ProjectDiagramView(APIView):
 
         serializer = ProjectAnalysisSerializer(data=request.data)
         if not serializer.is_valid():
-            return Response({"error": serializer.errors},
+            return Response({"error":"Invaild input prodived"},
                             status=status.HTTP_400_BAD_REQUEST)
 
         validated   = serializer.validated_data
@@ -180,8 +181,14 @@ class ProjectDiagramView(APIView):
             try:
                 raw_code = extract_project_files(project_zip)
             except Exception as exc:
-                return Response({"error": f"ZIP read failed: {exc}"},
-                                status=status.HTTP_422_UNPROCESSABLE_ENTITY)
+
+
+                logger.exception("ZIP extraction failed")
+
+                return Response(
+                    {"error": "Failed to process uploaded file."},
+                    status=status.HTTP_422_UNPROCESSABLE_ENTITY
+                )
 
         if not raw_code or not raw_code.strip():
             return Response(
@@ -191,8 +198,12 @@ class ProjectDiagramView(APIView):
         # Run AST analysis
         svg, err = generate_flowchart_svg(raw_code)
         if err and not svg:
-            return Response({"error": err},
-                            status=status.HTTP_422_UNPROCESSABLE_ENTITY)
+            logger.exception("Flowchart generation failed")
+
+            return Response(
+                {"error": "Unable to generate diagram."},
+                status=status.HTTP_422_UNPROCESSABLE_ENTITY
+            )
 
         analysis = {
             "svg":     svg,
