@@ -15,6 +15,9 @@ from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
 from rest_framework.response import Response
 from rest_framework import status
 
+from django.http import JsonResponse
+from django.conf import settings
+
 from .serializers import ProjectAnalysisSerializer
 from .utils import extract_project_files
 from .cfg_builder import generate_flowchart_svg
@@ -23,6 +26,19 @@ from .cfg_builder import generate_flowchart_svg
 # ─────────────────────────────────────────────
 #  Pure-AST helpers (no AI needed)
 # ─────────────────────────────────────────────
+class HealthCheckView(APIView):
+    """
+    GET /healthcheck/
+    Basic security + system status check
+    """
+
+    def get(self, request):
+        return Response({
+            "status": "ok",
+            "debug": settings.DEBUG,
+            "secure": not settings.DEBUG,
+            "message": "Application running securely"
+        })
 
 def extract_classes(code: str) -> list:
     """Return list of dicts: { name, bases, methods, fields }"""
@@ -187,6 +203,7 @@ class ProjectDiagramView(APIView):
         }
 
         if fmt == "json":
+
             return Response(analysis, status=status.HTTP_200_OK)
 
         if fmt == "html":
