@@ -1,6 +1,8 @@
 
 import ast
 from graphviz import Digraph
+import logging
+logger = logging.getLogger(__name__)
 
 STYLE = {
     "start_end":  dict(fillcolor="#1a1a2e", fontcolor="white",   color="#e94560", shape="oval"),
@@ -530,15 +532,18 @@ def generate_flowchart_svg(code: str):
 
                 return response.text, None
 
-            except Exception as e:
-                return None, str(e)
+            except Exception:
+                logger.exception("dot_to_svg failed")
+                return None, "internal_error"
         svg, err = dot_to_svg(clean_src)
         if err:
-            return "", f"Error generating SVG: {err}"
+            logger.error("SVG generation failed\nError: %s",err)
+            return "", "internal_error"
         return svg, None
     except Exception as e:
         import traceback
-        return "", f"Error: {e}\n{traceback.format_exc()}"
+        logger.exception("Unexpected error in generate_flowchart_svg")
+        return "", "internal_error"
 
 
 def _remove_passthrough_points(dot_source: str) -> str:
