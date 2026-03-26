@@ -506,7 +506,8 @@ def generate_flowchart_svg(code: str):
     try:
         tree = ast.parse(code)
     except SyntaxError as e:
-        return "", f"Syntax Error: {e}"
+        logger.error("Syntax error during AST parsing: %s", e)
+        return None, f"Syntax Error"
     try:
         b = CFGBuilder()
         for node in tree.body:
@@ -528,7 +529,8 @@ def generate_flowchart_svg(code: str):
                 )
 
                 if response.status_code != 200:
-                    return None, f"Kroki error: {response.status_code}"
+                    logger.error("Kroki error: %s\nDOT source:\n%s", response.status_code, dot_string)
+                    return None, f"Kroki error"
 
                 return response.text, None
 
@@ -538,12 +540,12 @@ def generate_flowchart_svg(code: str):
         svg, err = dot_to_svg(clean_src)
         if err:
             logger.error("SVG generation failed\nError: %s",err)
-            return "", "internal_error"
+            return None, "internal_error"
         return svg, None
     except Exception as e:
         import traceback
         logger.exception("Unexpected error in generate_flowchart_svg")
-        return "", "internal_error"
+        return None, "internal_error"
 
 
 def _remove_passthrough_points(dot_source: str) -> str:

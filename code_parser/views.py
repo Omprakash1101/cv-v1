@@ -123,7 +123,8 @@ def build_summary(code: str) -> str:
     try:
         tree = ast.parse(code)
     except SyntaxError as e:
-        return f"Syntax error: {e}"
+        logger.error("Syntax error during AST parsing: %s", e)
+        return f"Syntax error during AST parsing."
 
     funcs   = [n.name for n in ast.walk(tree)
                if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))]
