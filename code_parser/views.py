@@ -205,12 +205,18 @@ class ProjectDiagramView(APIView):
                 status=status.HTTP_422_UNPROCESSABLE_ENTITY
             )
 
+        # 👉 ADD HERE
+        import logging
+        logger = logging.getLogger(__name__)
+
+        if err:
+            logger.exception("Flowchart warning: %s", err)
+
         analysis = {
-            "svg":     svg,
+            "svg": svg,
             "classes": extract_classes(raw_code),
-            "steps":   extract_steps(raw_code),
+            "steps": extract_steps(raw_code),
             "summary": build_summary(raw_code),
-            "warning": err,
         }
 
         if fmt == "json":
